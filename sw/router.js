@@ -31,10 +31,10 @@
 		return result
 	}
 
-	async function setShell(cache) {
-		const shellPath = "/router/route/shell/view"
-		const shell = await (await cache.match(shellPath)).text()
-		SHELL_TEMPLATE = Handlebars.compile(shell)
+	async function getTemplate(name, cache) {
+		const templatePath = `/router/route/${name}/template`
+		const template = eval(await (await cache.match(templatePath)).text())
+		return Handlebars.template(template)
 	}
 
 	function parseRegexFromString(regex) {
@@ -52,27 +52,22 @@
 			await idbKeyval.set("routes", ROUTES)
 
 			for (const route of ROUTES) {
-				const viewPath = `/router/route/${route.name}/view`
-				await cache.add(viewPath)
-				const view = await (await cache.match(viewPath)).text()
-				route.template = Handlebars.compile(view)
+				await cache.add(`/router/route/${route.name}/template`)
+				route.template = await getTemplate(route.name, cache)
 			}
 
-			const shellPath = "/router/route/shell/view"
+			const shellPath = "/router/route/shell/template"
 			await cache.add(shellPath)
-			await setShell(cache)
+			SHELL_TEMPLATE = await getTemplate("shell", cache)
 		},
 		async fetch(request) {
 			if (ROUTES === undefined) {
 				const cache = await caches.open("router")
 				ROUTES = await idbKeyval.get("routes")
 				for (const route of ROUTES) {
-					const viewPath = `/router/route/${route.name}/view`
-					await cache.add(viewPath)
-					const view = await (await cache.match(viewPath)).text()
-					route.template = Handlebars.compile(view)
+					route.template = await getTemplate(route.name, cache)
 				}
-				await setShell(cache)
+				SHELL_TEMPLATE = await getTemplate("shell", cache)
 			}
 
 			const url = new URL(request.url)
