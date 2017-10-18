@@ -23,15 +23,18 @@
 	}
 
 	async function getView(route, params, getData, shell, cache) {
-		let cached
+		let result
 		let cacheId
 
 		if (route.maxAge !== null) {
 			cacheId = hash(route.name + JSON.stringify(params))
-			cached = await cache.get("view-" + cacheId)
+			result = await cache.get("view-" + cacheId)
 		}
 
-		if (route.maxAge === null || cached === undefined || cached.time < Date.now()) {
+		if (route.maxAge === null || result === undefined || result.time < Date.now()) {
+			if (result !== undefined) {
+				await cache.delete("view-" + cacheId)
+			}
 			const data = { name: route.name, data: await getData(params) }
 			const content = route.template(data)
 			const headIndex = content.indexOf("</head>")
@@ -51,16 +54,16 @@
 			}, data)
 
 			const time = Date.now() + route.maxAge
-			cached = {
+			result = {
 				content: shell(shellData),
 				time
 			}
 			if (route.maxAge !== null) {
-				await cache.set("view-" + cacheId, cached)
+				await cache.set("view-" + cacheId, result)
 			}
 		}
 
-		return cached
+		return result
 	}
 
 	if (IS_NODE) {
