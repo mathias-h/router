@@ -22,7 +22,6 @@
 
 	function getQueryParams(query) {
 		if (!query) return
-
 		const result = {}
 		for (const part of query.split("&")) {
 			const [key, value] = part.split("=")
@@ -54,6 +53,13 @@
 			for (const route of ROUTES) {
 				await cache.add(`/router/route/${route.name}/template`)
 				route.template = await getTemplate(route.name, cache)
+				const dataF = async(params) =>
+					await (await fetch(`/router/route/${route.name}/data`, {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify(params)
+					})).json()
+				route.dataF = dataF
 			}
 
 			const shellPath = "/router/route/shell/template"
@@ -66,6 +72,13 @@
 				ROUTES = await idbKeyval.get("routes")
 				for (const route of ROUTES) {
 					route.template = await getTemplate(route.name, cache)
+					const dataF = async(params) =>
+						await (await fetch(`/router/route/${route.name}/data`, {
+							method: "POST",
+							headers: { "content-type": "application/json" },
+							body: JSON.stringify(params)
+						})).json()
+					route.dataF = dataF
 				}
 				SHELL_TEMPLATE = await getTemplate("shell", cache)
 			}
@@ -73,42 +86,47 @@
 			const url = new URL(request.url)
 			const match = matchRoute(url.pathname)
 
-			if (match) {
-				const params = Object.assign(match.params, getQueryParams(url.query))
-				const route = match.route
-				const getData = async(params) =>
-					await (await fetch(`/router/route/${route.name}/data`, {
-						method: "POST",
-						headers: { "content-type": "application/json" },
-						body: JSON.stringify(params)
-					})).json()
-				try {
-					const result = await getView(route, params, getData, SHELL_TEMPLATE, idbKeyval)
-					return new Response(result.content, {
+			try {
+				if (match) {
+					const params = Object.assign(match.params, getQueryParams(url.query))
+					const route = match.route
+					const { time, data } = await getData(route.name, params, route.dataF, route.maxAge, idbKeyval)
+					const result = getView(data, route.template, SHELL_TEMPLATE)
+					return new Response(result, {
 						headers: {
 							"Content-Type": "text/html",
-							"Cache-Control": route.maxAge ? "public, max-age=" + (result.time - Date.now()) : undefined,
+							"Cache-Control": route.maxAge ? "public, max-age=" + (time - Date.now()) : undefined,
 							"X-From": "sw" // debug
 						}
 					})
 				}
-				catch (error) {
-					if (error.message === "Failed to fetch") {
-						if (navigator.onLine === false) {
-							// TODO offline fallback
-							return new Response("sorry but you are offline right now, try again later")
-						}
-					}
+				else if (url.pathname.startsWith("/router/route/") && url.pathname.endsWith("/content")) {
+					const name = url.pathname.match("^\/router\/route\/(.+?)\/content$")[1]
+					const route = ROUTES.find(r => r.name === name)
+					if (!route) { /* TODO handle no route found */ }
 					else {
-						throw error
+						const params = await request.json()
+						const { time, data } = await getData(route.name, params, route.dataF, route.maxAge, idbKeyval)
+						const result = getContent(data, route.template)
+						return new Response(JSON.stringify(result), {
+							headers: {
+								"Content-Type": "text/html",
+								"Cache-Control": route.maxAge ? "public, max-age=" + (time - Date.now()) : undefined,
+								"X-From": "sw" // debug
+							}
+						})
 					}
 				}
 			}
-			else if (url.pathname.startsWith("/router/route")) {
-				for (const route of ROUTES) {
-					if (url.pathname === "/router/route/" + route.name + "/content") {
-						// TODO get content
+			catch (error) {
+				if (error.message === "Failed to fetch") {
+					if (navigator.onLine === false) {
+						// TODO offline fallback
+						return new Response("sorry but you are offline right now, try again later")
 					}
+				}
+				else {
+					throw error
 				}
 			}
 		}

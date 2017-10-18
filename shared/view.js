@@ -22,54 +22,67 @@
 		handlebars = Handlebars
 	}
 
-	async function getView(route, params, getData, shell, cache) {
-		let result
-		let cacheId
+	async function getData(name, params, dataF, maxAge, cache) {
+		const cacheId = hash(name + JSON.stringify(params))
+		if (maxAge !== null) {
+			const cached = await cache.get("view-" + cacheId)
 
-		if (route.maxAge !== null) {
-			cacheId = hash(route.name + JSON.stringify(params))
-			result = await cache.get("view-" + cacheId)
-		}
-
-		if (route.maxAge === null || result === undefined || result.time < Date.now()) {
-			if (result !== undefined) {
-				await cache.delete("view-" + cacheId)
-			}
-			const data = { name: route.name, data: await getData(params) }
-			const content = route.template(data)
-			const headIndex = content.indexOf("</head>")
-			let body
-			let head
-			if (headIndex !== -1) {
-				head = content.substring("<head>".length, headIndex)
-				body = content.substring(headIndex + "</head>".length)
-			}
-			else {
-				body = content
-				head = ""
-			}
-			const shellData = Object.assign({
-				head: new handlebars.SafeString(head),
-				body: new handlebars.SafeString(body)
-			}, data)
-
-			const time = Date.now() + route.maxAge
-			result = {
-				content: shell(shellData),
-				time
-			}
-			if (route.maxAge !== null) {
-				await cache.set("view-" + cacheId, result)
+			if (cached) {
+				if (cached.time > Date.now()) {
+					return cached
+				}
+				else {
+					await cache.delete("view-" + cacheId)
+				}
 			}
 		}
+		const data = { name, data: await dataF(params) }
+		const cached = { time: Date.now() + maxAge, data }
+		if (maxAge !== null) {
+			await cache.set("view-" + cacheId, cached)
+		}
+		return cached
+	}
 
-		return result
+	function getView(data, template, shell) {
+		const { head, body } = getContent(data, template)
+
+		const shellData = Object.assign({
+			head: new handlebars.SafeString(head),
+			body: new handlebars.SafeString(body)
+		}, data)
+
+		return shell(shellData)
+	}
+
+	function getContent(data, template) {
+		const content = template(data)
+		const headIndex = content.indexOf("</head>")
+		let body
+		let head
+		if (headIndex !== -1) {
+			head = content.substring("<head>".length, headIndex)
+			body = content.substring(headIndex + "</head>".length)
+		}
+		else {
+			body = content
+			head = ""
+		}
+
+		return {
+			head,
+			body
+		}
 	}
 
 	if (IS_NODE) {
+		module.exports.getData = getData
 		module.exports.getView = getView
+		module.exports.getContent = getContent
 	}
 	else {
+		self.getData = getData
 		self.getView = getView
+		self.getContent = getContent
 	}
 })()

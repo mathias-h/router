@@ -3,7 +3,7 @@ const express = require("express")
 const pathtoRegexp = require("path-to-regexp")
 const ms = require("ms")
 const handlebars = require("handlebars")
-const { getView } = require("./shared/view")
+const { getView, getData, getContent } = require("./shared/view")
 const { execFile } = require("mz/child_process")
 const pathLib = require("path")
 
@@ -25,30 +25,31 @@ class Router {
 	}
 
 	async route(name, path, options = {}) {
-		const getData = options.data || (() => ({}))
+		const dataF = options.data || (() => ({}))
 		const maxAge = options.maxAge ? ms(options.maxAge) : null
-		const route = await Router.addRoute(name, path, maxAge)
+		let { template, regex, keys } = await Router.addRoute(name, path, maxAge)
 
-		this.app.get(route.regex, async(req, res, next) => {
+		this.app.get(regex, async(req, res, next) => {
 			const params = {}
-			for (let i = 0; i < route.keys.length; i++) {
-				params[route.keys[i].name] = req.params[i]
+			for (let i = 0; i < keys.length; i++) {
+				params[keys[i].name] = req.params[i]
 			}
 
-			// if (!IS_PROD) {
-			// 	route.template = await Router.compileTemplate(name)
-			// 	Router.shell = await Router.compileTemplate("shell")
-			// }
+			if (!IS_PROD) {
+				template = await Router.compileTemplate(name)
+				Router.shell = await Router.compileTemplate("shell")
+			}
 
 			try {
-				const result = await getView(route, Object.assign({}, params, req.query), getData, Router.shell, Router.cache)
+				const { time, data } = await getData(name, params, dataF, maxAge, Router.cache)
+				const result = getView(data, template, Router.shell)
 
 				res.setHeader("Content-Type", "text/html")
 				if (maxAge) {
-					res.setHeader("Cache-Control", "public, max-age=" + (result.time - Date.now()))
+					res.setHeader("Cache-Control", "public, max-age=" + (time - Date.now()))
 				}
 
-				res.end(result.content)
+				res.end(result)
 			}
 			catch (error) {
 				next(error)
@@ -57,7 +58,31 @@ class Router {
 		this.app.post(`/router/route/${name}/data`, async(req, res, next) => {
 			try {
 				const params = JSON.parse(await readStream(req))
-				res.json(await getData(params))
+				const { time, data: { data } } = await getData(name, params, dataF, maxAge, Router.cache)
+				if (maxAge) {
+					res.setHeader("Cache-Control", "public, max-age=" + (time - Date.now()))
+				}
+				res.json(data)
+			}
+			catch (error) {
+				next(error)
+			}
+		})
+
+		this.app.post(`/router/route/${name}/content`, async(req, res, next) => {
+			try {
+				if (!IS_PROD) {
+					template = await Router.compileTemplate(name)
+					Router.shell = await Router.compileTemplate("shell")
+				}
+
+				const params = JSON.parse(await readStream(req))
+				const { time, data } = await getData(name, params, dataF, maxAge, Router.cache)
+				const result = getContent(data, template)
+				if (maxAge) {
+					res.setHeader("Cache-Control", "public, max-age=" + (time - Date.now()))
+				}
+				res.json(result)
 			}
 			catch (error) {
 				next(error)
@@ -66,7 +91,6 @@ class Router {
 
 		this.app.get(`/router/route/${name}/template`, async(req, res, next) => {
 			try {
-				console.log(`${Router.compiledViewPath}/${name}.js`)
 				res.sendFile(`${Router.compiledViewPath}/${name}.js`)
 			}
 			catch (error) {
@@ -96,8 +120,6 @@ class Router {
 		this.routes.push({ name, regex: regex.toString(), keys, maxAge })
 
 		return {
-			name,
-			maxAge,
 			template,
 			regex,
 			keys
