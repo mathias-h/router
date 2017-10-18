@@ -6,7 +6,6 @@ const { getTemplate } = require("./template")
 app.use(express.static("example"))
 
 app.get("/home/:test", (req, res) => {
-	console.log("OK")
 	const data =   { test: req.params.test }
 	res.writeHead(200, { "content-type": "text/html" })
 	getTemplate("home", data).then(content => res.end(content))

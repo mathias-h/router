@@ -14,7 +14,7 @@ addEventListener("fetch", evt => {
 		}
 		catch (error) {
 			console.error(error)
-			return new Response(error.message + "\n" + error.stack, {
+			return new Response("SW ERROR: " + error.message + "\n" + error.stack, {
 				status: 500
 			})
 		}

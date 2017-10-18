@@ -4,7 +4,6 @@ const morgan = require("morgan")
 
 ;
 (async() => {
-	debugger
 	const app = express()
 	const router = new Router(app)
 
@@ -23,7 +22,7 @@ const morgan = require("morgan")
 		data()  {
 			return items
 		},
-		maxAge: "1h"
+		maxAge: "1d"
 	})
 
 	// router.route("search", "/search/:query", {
