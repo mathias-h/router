@@ -22,18 +22,18 @@
 		handlebars = Handlebars
 	}
 
-	async function getView(name, params, getData, template, shell, cache, maxAge) {
+	async function getView(route, params, getData, shell, cache) {
 		let cached
 		let cacheId
 
-		if (maxAge !== null) {
-			cacheId = hash(name + JSON.stringify(params))
+		if (route.maxAge !== null) {
+			cacheId = hash(route.name + JSON.stringify(params))
 			cached = await cache.get("view-" + cacheId)
 		}
 
-		if (maxAge === null || cached === undefined || cached.time < Date.now()) {
-			const data = { name, data: await getData(params) }
-			const content = template(data)
+		if (route.maxAge === null || cached === undefined || cached.time < Date.now()) {
+			const data = { name: route.name, data: await getData(params) }
+			const content = route.template(data)
 			const headIndex = content.indexOf("</head>")
 			let body
 			let head
@@ -50,12 +50,12 @@
 				body: new handlebars.SafeString(body)
 			}, data)
 
-			const time = Date.now() + maxAge
+			const time = Date.now() + route.maxAge
 			cached = {
 				content: shell(shellData),
 				time
 			}
-			if (maxAge) {
+			if (route.maxAge !== null) {
 				await cache.set("view-" + cacheId, cached)
 			}
 		}

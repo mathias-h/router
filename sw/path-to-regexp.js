@@ -15,15 +15,13 @@ var MATCHING_GROUP_REGEXP = /\((?!\?)/g;
  * @return {RegExp}
  * @api private
  */
-function pathtoRegexp(path, keys = [], options = {}) {
-	var strict = options.strict;
-	var end = !!options.end;
-	var flags = options.sensitive ? '' : 'i';
-	var extraOffset = 0;
-	var keysOffset = keys.length;
-	var i = 0;
-	var name = 0;
-	var m;
+function pathtoRegexp(path, keys = []) {
+	const flags = "i";
+	let extraOffset = 0;
+	const keysOffset = keys.length;
+	let i = 0;
+	let name = 0;
+	let m;
 
 	if (path instanceof RegExp) {
 		while (m = MATCHING_GROUP_REGEXP.exec(path.source)) {
@@ -41,14 +39,12 @@ function pathtoRegexp(path, keys = [], options = {}) {
 		// Map array parts into regexps and return their source. We also pass
 		// the same keys and options instance into every generation to get
 		// consistent matching groups before we join the sources together.
-		path = path.map(function(value) {
-			return pathtoRegexp(value, keys, options).source;
-		});
+		path = path.map(value => pathtoRegexp(value, keys, options).source);
 
 		return new RegExp('(?:' + path.join('|') + ')', flags);
 	}
 
-	path = ('^' + path + (strict ? '' : path[path.length - 1] === '/' ? '?' : '/?'))
+	path = ('^' + path + (path[path.length - 1] === '/' ? '?' : '/?'))
 		.replace(/\/\(/g, '/(?:')
 		.replace(/([\/\.])/g, '\\$1')
 		.replace(/(\\\/)?(\\\.)?:(\w+)(\(.*?\))?(\*)?(\?)?/g, function(match, slash, format, key, capture, star, optional, offset) {
@@ -111,7 +107,7 @@ function pathtoRegexp(path, keys = [], options = {}) {
 	}
 
 	// If the path is non-ending, match until the end or a slash.
-	path += (end ? '$' : (path[path.length - 1] === '/' ? '' : '(?=\\/|$)'));
+	path += "$";
 
 	return new RegExp(path, flags);
 };

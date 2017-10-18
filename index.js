@@ -42,28 +42,37 @@ class Router {
 
 	async route(name, path, options = {}) {
 		const getData = options.data || (() => ({}))
+		const route = {
+			name,
+			maxAge,
+			template: cachedTemplate
+		}
 		const maxAge = options.maxAge ? ms(options.maxAge) : null
 		let cachedTemplate
 		if (IS_PROD) {
 			cachedTemplate = await this.getTemplate(name)
 		}
 
-		Router.routes.push({ name, path, maxAge })
+		const keys = []
+		const regex = pathtoRegexp(path, keys).toString()
+		Router.routes.push({ name, regex, keys, maxAge })
 
-		this.app.get(path, async(req, res, next) => {
+		this.app.get(regex, async(req, res, next) => {
+			const params = {}
+			for (let i = 0; i < keys.length; i++) {
+				params[keys[i].name] = req.params[i]
+			}
+
 			try {
-				let template
 				let shell
 				if (IS_PROD) {
-					template = cachedTemplate
 					shell = this.shell
 				}
 				else {
-					template = await this.getTemplate(name)
+					route.template = await this.getTemplate(name)
 					shell = await this.getTemplate("shell")
 				}
-				const params = Object.assign({}, req.params, req.query)
-				const result = await getView(name, params, getData, template, shell, this.cache, maxAge)
+				const result = await getView(route, Object.assign({}, params, req.query), getData, shell, this.cache)
 
 				res.setHeader("Content-Type", "text/html")
 				if (maxAge) {
@@ -103,21 +112,9 @@ class Router {
 	}
 
 	static async init(app) {
-		app.get("/router/routes", (_, res) => {
-			res.json(this.routes.map(route => {
-				const keys = []
-				return {
-					name: route.name,
-					maxAge: route.maxAge,
-					regex: pathtoRegexp(route.path, keys).toString(),
-					keys: keys,
-				}
-			}))
-		})
+		app.get("/router/routes", (_, res) => res.json(this.routes))
 		app.get("/router/route/shell/view", (_, res) => res.sendFile(this.viewPath + "shell.html"))
-		app.get("/router.js", (_, res) => res.sendFile(__dirname + "/sw/router.js"))
-		app.get("/router/sw/path-to-regexp.js", (_, res) => res.sendFile(__dirname + "/sw/path-to-regexp.js"))
-		app.get("/router/sw/idbkeyval.js", (_, res) => res.sendFile(__dirname + "/sw/idbkeyval.js"))
+		app.use("/router/sw", express.static(__dirname + "/"))
 		app.get("/router/sw/view.js", (_, res) => res.sendFile(__dirname + "/shared/view.js"))
 		app.get("/router/sw/handlebars.js", (_, res) => res.sendFile(__dirname + "/node_modules/handlebars/dist/handlebars.min.js"))
 	}
