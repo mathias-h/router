@@ -1,0 +1,41 @@
+<head>
+	<style>
+		#items {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, 100px);
+			grid-gap: 16px;
+		}
+
+		#home .item {
+			width: 100px;
+		}
+
+		#home .item img {
+			width: 100px;
+		}
+
+		#home .item div {
+			display: flex;
+			align-items: center;
+		}
+
+		#home .item p {
+			margin-right: 12px;
+		}
+	</style>
+</head>
+
+<div id="home">
+	<h2>Shop</h2>
+	<div id="items">
+		{{#each data}}
+			<a class="item" href="/item/{{this.id}}">
+				<img src="{{this.image}}" />
+				<div>
+					<p>{{this.name}}</p>
+					<b>${{this.price}}</b>
+				</div>
+			</a>
+		{{/each}}
+	</div>
+</div>
