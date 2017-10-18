@@ -57,15 +57,21 @@
 				const view = await (await cache.match(viewPath)).text()
 				route.template = Handlebars.compile(view)
 			}
+
 			const shellPath = "/router/route/shell/view"
 			await cache.add(shellPath)
 			await setShell(cache)
 		},
 		async fetch(request) {
-
 			if (ROUTES === undefined) {
 				const cache = await caches.open("router")
 				ROUTES = await idbKeyval.get("routes")
+				for (const route of ROUTES) {
+					const viewPath = `/router/route/${route.name}/view`
+					await cache.add(viewPath)
+					const view = await (await cache.match(viewPath)).text()
+					route.template = Handlebars.compile(view)
+				}
 				await setShell(cache)
 			}
 
@@ -82,7 +88,7 @@
 						body: JSON.stringify(params)
 					})).json()
 				try {
-					const result = await getView(route.name, params, getData, route.template, SHELL_TEMPLATE, idbKeyval, route.maxAge)
+					const result = await getView(route, params, getData, SHELL_TEMPLATE, idbKeyval)
 					return new Response(result.content, {
 						headers: {
 							"Content-Type": "text/html",
@@ -100,6 +106,13 @@
 					}
 					else {
 						throw error
+					}
+				}
+			}
+			else if (url.pathname.startsWith("/router/route")) {
+				for (const route of ROUTES) {
+					if (url.pathname === "/router/route/" + route.name + "/content") {
+						// TODO get content
 					}
 				}
 			}
